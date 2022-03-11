@@ -5,6 +5,7 @@
 
 const path = require("path");
 const cp = require("child_process");
+const fs = require("fs");
 
 // If the semver string a is greater than b, return 1. If the semver string b is greater than a, return -1. If a equals b, return 0;
 var semver =
@@ -84,13 +85,20 @@ function semverCompare(v1, v2) {
   return 0;
 }
 
+const getVersion = (contents) => {
+  const lines = contents.split('\n')
+  const versionLine = lines.filter(line => line.startsWith('version='))[0]
+  const version = versionLine.split('=')[1]
+  return version
+}
+
 // Input parameters. See action.yaml
-const { INPUT_PATH, INPUT_TOKEN, INPUT_FORMAT } = process.env;
+const { INPUT_PATH, INPUT_TOKEN } = process.env;
 
 const event = require(process.env.GITHUB_EVENT_PATH);
-const file = path.join(INPUT_PATH, "package.json");
+const file = path.join(INPUT_PATH, "gradle.properties");
 
-// Fetch the base package.json file
+// Fetch the base gradle.properties file
 // https://developer.github.com/v3/repos/contents/#get-contents
 const res = cp.spawnSync("curl", [
   "--header",
@@ -105,37 +113,27 @@ if (res.status != 0) {
   process.exit(res.status);
 }
 
-const base = JSON.parse(res.stdout.toString());
-const head = require(path.resolve(process.cwd(), file));
+const baseContents = res.stdout.toString();
+const baseVersion = getVersion(baseContents);
 
-console.log(`${base.name} v${base.version} => ${head.name} v${head.version}`);
+const headContents = fs.readFileSync(path.resolve(process.cwd(), file, { encoding: 'utf8', flag: 'r' }));
+const headVersion = getVersion(headContents);
 
-if (base.name == head.name) {
-  if (base.version === head.version) {
-    console.log(`::error file=${file},line=3::Requires a new version number.`);
-    process.exit(1);
-  }
+console.log(`$v${baseVersion} => v${headVersion}`);
 
-  const versionDiffResult = semverCompare(base.version, head.version);
-
-  if (versionDiffResult === 1 || versionDiffResult === 0) {
-    console.log(
-      `::error file=${file},line=3::Requires a newer version number.`
-    );
-    process.exit(1);
-  }
-} else {
-  console.log(`::warning file=${file},line=2::Package has a different name.`);
+if (baseVersion === headVersion) {
+  console.log(`::error file=${file},line=3::Requires a new version number.`);
+  process.exit(1);
 }
 
-// Release name, e.g. "api_v1.0.0+build.345.zip"
-const release = INPUT_FORMAT.replace(/\{pkg\}/gi, head.name)
-  .replace(/\{name\}/gi, head.name)
-  .replace(/\{version\}/gi, head.version)
-  .replace(/\{pr\}/gi, event.pull_request.number)
-  .replace(/\{pr_number\}/gi, event.pull_request.number);
+const versionDiffResult = semverCompare(baseVersion, headVersion);
 
-// Set the action output values (name, version, release)
-console.log(`::set-output name=name::${head.name}`);
-console.log(`::set-output name=version::${head.version}`);
-console.log(`::set-output name=release::${release}`);
+if (versionDiffResult === 1 || versionDiffResult === 0) {
+  console.log(
+    `::error file=${file},line=3::Requires a newer version number.`
+  );
+  process.exit(1);
+}
+
+// Set the action output values (version)
+console.log(`::set-output name=version::${headVersion}`);
