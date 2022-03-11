@@ -116,7 +116,7 @@ if (res.status != 0) {
 const baseContents = res.stdout.toString();
 const baseVersion = getVersion(baseContents);
 
-const headContents = fs.readFileSync(path.resolve(process.cwd(), file, { encoding: 'utf8', flag: 'r' }));
+const headContents = fs.readFileSync(path.resolve(process.cwd(), file), { encoding: 'utf8', flag: 'r' });
 const headVersion = getVersion(headContents);
 
 console.log(`$v${baseVersion} => v${headVersion}`);
